@@ -1,0 +1,8 @@
+pandas
+scikit-learn
+ydata-profiling
+joblib
+numpy
+pytest
+beautifulsoup4
+requests
