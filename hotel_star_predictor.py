@@ -14,13 +14,15 @@ class HotelStarPredictor:
         self.model_cls_file = model_cls_file
         self.model_reg_file = model_reg_file
         self.encoder_file = 'models/encoder.pkl'
+        self.features_file = 'models/features.pkl'
 
         self.df = None
         self.X = None
-        self.y = None  # Original target (catégories pour classification)
+        self.y = None
         self.model_cls = None
         self.model_reg = None
         self.encoder = None
+        self.feature_names = None
 
     def load_data(self):
         print("📂 Chargement des données...")
@@ -33,10 +35,8 @@ class HotelStarPredictor:
 
         self.df['Évaluation'] = self.df['Évaluation'].replace('Non trouvé', np.nan)
         self.df.dropna(subset=['Évaluation'], inplace=True)
-
         self.df['Évaluation'] = self.df['Évaluation'].astype(str).str.strip()
 
-        # Stocker une version numérique de la cible pour la régression
         try:
             self.df['Évaluation_float'] = self.df['Évaluation'].astype(float)
         except Exception as e:
@@ -45,18 +45,15 @@ class HotelStarPredictor:
 
         self.df['Évaluation'] = self.df['Évaluation'].astype('category')
 
-        # Remplir les colonnes textuelles
         cols_to_fill = self.df.select_dtypes(include='object').columns.tolist()
         if 'Évaluation' in cols_to_fill:
             cols_to_fill.remove('Évaluation')
         self.df[cols_to_fill] = self.df[cols_to_fill].fillna('')
 
-        # Features
         self.y = self.df['Évaluation']
         y_float = self.df['Évaluation_float']
         X_raw = self.df.drop(columns=['Évaluation', 'Évaluation_float'])
 
-        # Encodage OneHot
         cat_cols = X_raw.select_dtypes(include=['object', 'category']).columns
         num_cols = X_raw.select_dtypes(include=np.number).columns
 
@@ -66,8 +63,10 @@ class HotelStarPredictor:
         df_encoded = pd.DataFrame(X_encoded, columns=encoded_names, index=X_raw.index)
 
         self.X = pd.concat([df_encoded, X_raw[num_cols]], axis=1)
-        self.y_cls = self.y  # Pour classification
-        self.y_reg = y_float  # Pour régression
+        self.feature_names = self.X.columns.tolist()
+
+        self.y_cls = self.y
+        self.y_reg = y_float
 
         print("✅ Prétraitement terminé. X shape:", self.X.shape)
 
@@ -92,21 +91,17 @@ class HotelStarPredictor:
 
         y_pred = self.model_reg.predict(X_test)
 
-        mae = mean_absolute_error(y_test, y_pred)
-        mse = mean_squared_error(y_test, y_pred)
-        rmse = np.sqrt(mse)
-        r2 = r2_score(y_test, y_pred)
-
-        print(f"📊 MAE : {mae:.2f}")
-        print(f"📉 MSE : {mse:.2f}")
-        print(f"📐 RMSE : {rmse:.2f}")
-        print(f"📈 R² : {r2:.2f}")
+        print(f"📊 MAE : {mean_absolute_error(y_test, y_pred):.2f}")
+        print(f"📉 MSE : {mean_squared_error(y_test, y_pred):.2f}")
+        print(f"📐 RMSE : {np.sqrt(mean_squared_error(y_test, y_pred)):.2f}")
+        print(f"📈 R² : {r2_score(y_test, y_pred):.2f}")
 
     def save_models(self):
         print("💾 Sauvegarde des modèles...")
         joblib.dump(self.model_cls, self.model_cls_file)
         joblib.dump(self.model_reg, self.model_reg_file)
         joblib.dump(self.encoder, self.encoder_file)
+        joblib.dump(self.feature_names, self.features_file)
         print("✅ Modèles et encodeur sauvegardés.")
 
     def run(self):
@@ -117,28 +112,28 @@ class HotelStarPredictor:
         self.save_models()
 
     def predict(self, df_input):
-
-        
         if self.encoder is None or self.model_reg is None:
-            raise ValueError("Le modèle et l'encodeur doivent être chargés ou entraînés avant de prédire.")
+            raise ValueError("Modèle ou encodeur non chargé.")
+        try:
+            self.feature_names = joblib.load(self.features_file)
+        except:
+            raise ValueError("Fichier contenant les noms des colonnes non trouvé.")
 
-        # Identifier colonnes catégorielles et numériques comme dans preprocess
         cat_cols = df_input.select_dtypes(include=['object', 'category']).columns
         num_cols = df_input.select_dtypes(include=np.number).columns
 
-        # Encoder les colonnes catégorielles
         X_encoded = self.encoder.transform(df_input[cat_cols])
         encoded_names = self.encoder.get_feature_names_out(cat_cols)
         df_encoded = pd.DataFrame(X_encoded, columns=encoded_names, index=df_input.index)
 
-        # Combiner encoded + numériques
         X_processed = pd.concat([df_encoded, df_input[num_cols]], axis=1)
 
-        # Prédiction régression (étoiles float)
-        pred = self.model_reg.predict(X_processed)
+        for col in self.feature_names:
+            if col not in X_processed.columns:
+                X_processed[col] = 0
+        X_processed = X_processed[self.feature_names]
 
-        return pred
-
+        return self.model_reg.predict(X_processed)
 # Exemple d'utilisation
 if __name__ == '__main__':
     predictor = HotelStarPredictor()

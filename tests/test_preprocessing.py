@@ -21,13 +21,16 @@ class TestHotelStarPredictor(unittest.TestCase):
 
     def test_model_training(self):
         self.predictor.preprocess()
-        # Correction: Appeler la méthode train_classifier ou train_regressor,
-        # car il n'y a pas de méthode train_model dans la classe HotelStarPredictor.
-        # Supposons que vous vouliez tester l'entraînement du classificateur.
         self.predictor.train_classifier()
-        self.assertIsNotNone(self.predictor.model_cls) # Vérifier le modèle classificateur
+
+        # ✅ Vérifier que le modèle a été instancié
+        self.assertIsNotNone(self.predictor.model_cls)
+
+        # ✅ Vérifier que le modèle peut faire une prédiction
+        sample = self.predictor.X.iloc[[0]]  # une ligne de test
+        prediction = self.predictor.model_cls.predict(sample)
+        self.assertTrue(len(prediction) == 1)
 
 
 if __name__ == '__main__':
-    # Modifier l'appel à unittest.main() pour éviter la sortie dans un notebook
     unittest.main(argv=['first-arg-is-ignored'], exit=False)
